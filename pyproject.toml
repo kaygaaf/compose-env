@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "compose-env"
+version = "0.1.0"
+description = "Check docker-compose files for missing environment variables."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Kaygaaf" }]
+dependencies = ["PyYAML>=6"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+compose-env = "compose_env.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["compose_env*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
