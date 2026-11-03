@@ -12,6 +12,11 @@ license = { text = "MIT" }
 authors = [{ name = "Kaygaaf" }]
 dependencies = ["PyYAML>=6"]
 
+[project.urls]
+Homepage = "https://github.com/kaygaaf/compose-env"
+Issues = "https://github.com/kaygaaf/compose-env/issues"
+Funding = "https://ko-fi.com/kayorama"
+
 [project.optional-dependencies]
 dev = ["pytest>=7"]
 
