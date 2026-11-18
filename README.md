@@ -10,12 +10,10 @@ Handy when you self-host with Coolify, Portainer, or plain Compose and something
 
 Requires Python 3.10 or newer.
 
-```bash
-pipx install compose-env
-```
+It's not on PyPI yet, so install it from GitHub:
 
 ```bash
-pip install compose-env
+pipx install git+https://github.com/kaygaaf/compose-env
 ```
 
 From a checkout of this repo:
