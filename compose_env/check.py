@@ -8,7 +8,7 @@ import re
 
 import yaml
 
-from compose_env.refs import iter_references
+from compose_env.refs import Guard, walk
 
 # Compose defines these itself (or gives them a default). A file may
 # reference them without the user exporting a value.
@@ -87,11 +87,12 @@ def build_report(
     compose_files = _compose_files(compose_args, cwd)
     required: set[str] = set()
     defaulted: set[str] = set()
+    conditional: list[tuple[str, tuple[Guard, ...]]] = []
     service_env_files: list[Path] = []
 
     for display, path in compose_files:
         for doc in _load_yaml(display, path):
-            _scan_node(doc, required, defaulted)
+            _scan_node(doc, required, defaulted, conditional)
             _scan_service_env(doc, path.parent, required, service_env_files)
 
     if strict:
@@ -104,6 +105,12 @@ def build_report(
         provided.update(_read_env_keys(display, path, missing_ok=False))
     for path in service_env_files:
         provided.update(_read_env_keys(str(path), path, missing_ok=True))
+
+    for name, guards in conditional:
+        if name in COMPOSE_BUILTINS or name in provided:
+            continue
+        if _branch_runs(guards, provided):
+            needed.add(name)
 
     missing = sorted(needed - provided)
     return Report(
@@ -175,23 +182,43 @@ def _load_yaml(display: str, path: Path) -> list:
         raise ComposeEnvError(f"invalid YAML in {display}: {problem}") from exc
 
 
-def _scan_node(node, required: set[str], defaulted: set[str]) -> None:
+def _branch_runs(guards: tuple[Guard, ...], provided: set[str]) -> bool:
+    """True when every outer branch would actually be expanded."""
+    for guard in guards:
+        present = guard.name in provided or guard.name in COMPOSE_BUILTINS
+        if guard.must_be_unset and present:
+            return False
+        if not guard.must_be_unset and not present:
+            return False
+    return True
+
+
+def _scan_node(
+    node,
+    required: set[str],
+    defaulted: set[str],
+    conditional: list[tuple[str, tuple[Guard, ...]]],
+) -> None:
     if isinstance(node, str):
-        for name, has_default in iter_references(node):
-            if has_default:
-                defaulted.add(name)
+        for ref in walk(node):
+            if ref.guards and not ref.has_default:
+                conditional.append((ref.name, ref.guards))
+            elif ref.guards:
+                continue
+            elif ref.has_default:
+                defaulted.add(ref.name)
             else:
-                required.add(name)
+                required.add(ref.name)
         return
     if isinstance(node, dict):
         for key, value in node.items():
             if isinstance(key, str):
-                _scan_node(key, required, defaulted)
-            _scan_node(value, required, defaulted)
+                _scan_node(key, required, defaulted, conditional)
+            _scan_node(value, required, defaulted, conditional)
         return
     if isinstance(node, list):
         for item in node:
-            _scan_node(item, required, defaulted)
+            _scan_node(item, required, defaulted, conditional)
 
 
 def _scan_service_env(

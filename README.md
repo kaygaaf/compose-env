@@ -40,7 +40,7 @@ compose-env --json
 compose-env --strict
 ```
 
-A name is required when the file uses `$VAR` or `${VAR}` and there is no default. `${VAR:-default}` and `${VAR-default}` are not required. `--strict` also reports names that only show up with a default.
+A name is required when the file uses `$VAR` or `${VAR}` and there is no default. `${VAR:-default}` and `${VAR-default}` are not required. A `${VAR:?message}` written inside a default still counts, but only when Compose would actually use that default. If the outer name is set, the inner one is left alone. `--strict` also reports names that only show up with a default.
 
 `$$` is a literal dollar sign, same as in Compose, so `$$VAR` is not a reference.
 

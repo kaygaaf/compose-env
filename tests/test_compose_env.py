@@ -274,6 +274,132 @@ def test_sorted_missing_names(tmp_path: Path, monkeypatch, capsys):
     assert capsys.readouterr().out == "CE_TEST_ALPHA\nCE_TEST_ZEBRA\n"
 
 
+def test_required_var_nested_in_default(tmp_path: Path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CE_TEST_TAG", raising=False)
+    monkeypatch.delenv("CE_TEST_IMAGE", raising=False)
+    (tmp_path / "compose.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    image: app:${CE_TEST_TAG:-${CE_TEST_IMAGE:?set one}}\n",
+        encoding="utf-8",
+    )
+    assert main(["-f", "compose.yml"]) == 1
+    assert capsys.readouterr().out == "CE_TEST_IMAGE\n"
+
+
+def test_nested_required_not_needed_when_outer_is_set(
+    tmp_path: Path, monkeypatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CE_TEST_TAG", "pinned")
+    monkeypatch.delenv("CE_TEST_IMAGE", raising=False)
+    (tmp_path / "compose.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    image: app:${CE_TEST_TAG:-${CE_TEST_IMAGE:?set one}}\n",
+        encoding="utf-8",
+    )
+    assert main(["-f", "compose.yml"]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_nested_required_satisfied_by_inner(tmp_path: Path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CE_TEST_TAG", raising=False)
+    monkeypatch.setenv("CE_TEST_IMAGE", "app:1")
+    (tmp_path / "compose.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    image: app:${CE_TEST_TAG:-${CE_TEST_IMAGE:?set one}}\n",
+        encoding="utf-8",
+    )
+    assert main(["-f", "compose.yml"]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_chained_default_only_requires_the_branch_that_runs(
+    tmp_path: Path, monkeypatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CE_TEST_A", raising=False)
+    monkeypatch.setenv("CE_TEST_B", "set")
+    monkeypatch.delenv("CE_TEST_C", raising=False)
+    (tmp_path / "compose.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    image: app:${CE_TEST_A:-${CE_TEST_B:-${CE_TEST_C:?need}}}\n",
+        encoding="utf-8",
+    )
+    assert main(["-f", "compose.yml"]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_chained_default_reports_the_inner_required_var(
+    tmp_path: Path, monkeypatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CE_TEST_A", raising=False)
+    monkeypatch.delenv("CE_TEST_B", raising=False)
+    monkeypatch.delenv("CE_TEST_C", raising=False)
+    (tmp_path / "compose.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    image: app:${CE_TEST_A:-${CE_TEST_B:-${CE_TEST_C:?need}}}\n",
+        encoding="utf-8",
+    )
+    assert main(["-f", "compose.yml"]) == 1
+    assert capsys.readouterr().out == "CE_TEST_C\n"
+
+
+def test_presence_branch_requires_the_inner_var_when_outer_is_set(
+    tmp_path: Path, monkeypatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CE_TEST_A", "on")
+    monkeypatch.delenv("CE_TEST_C", raising=False)
+    (tmp_path / "compose.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    image: app:${CE_TEST_A:+${CE_TEST_C:?need}}\n",
+        encoding="utf-8",
+    )
+    assert main(["-f", "compose.yml"]) == 1
+    assert capsys.readouterr().out == "CE_TEST_C\n"
+
+
+def test_presence_branch_is_quiet_when_outer_is_unset(
+    tmp_path: Path, monkeypatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CE_TEST_A", raising=False)
+    monkeypatch.delenv("CE_TEST_C", raising=False)
+    (tmp_path / "compose.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    image: app:${CE_TEST_A:+${CE_TEST_C:?need}}\n",
+        encoding="utf-8",
+    )
+    assert main(["-f", "compose.yml"]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_builtin_outer_name_does_not_force_the_default(
+    tmp_path: Path, monkeypatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COMPOSE_PROJECT_NAME", raising=False)
+    monkeypatch.delenv("CE_TEST_IMAGE", raising=False)
+    (tmp_path / "compose.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    image: app:${COMPOSE_PROJECT_NAME:-${CE_TEST_IMAGE:?need}}\n",
+        encoding="utf-8",
+    )
+    assert main(["-f", "compose.yml"]) == 0
+    assert capsys.readouterr().out == ""
+
+
 def test_list_passthrough_without_equals(tmp_path: Path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("CE_TEST_PASS", raising=False)
