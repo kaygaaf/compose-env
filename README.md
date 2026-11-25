@@ -46,7 +46,7 @@ A name is required when the file uses `$VAR` or `${VAR}` and there is no default
 
 Values are taken from the process environment, then from `--env-file`. If you omit `--env-file`, `.env` in the current directory is used when it is present. Lines are `KEY=VALUE` (a colon separator works too). Blank lines and `#` comments are ignored. An empty value still counts as set.
 
-Keys in a service `env_file` are treated as set when that file exists. Paths are relative to the compose file. Missing `env_file` paths are skipped.
+Keys in a service `env_file` are treated as set when that file exists. Paths are relative to the compose file. A missing file is an error, unless that entry sets `required: false`. A path that still contains `$` is skipped, because the file name is not known yet.
 
 Under `environment`, a name with no value (`FOO:` or `- FOO`) is required. `FOO: bar` is a literal and is not.
 

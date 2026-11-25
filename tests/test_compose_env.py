@@ -414,3 +414,73 @@ def test_list_passthrough_without_equals(tmp_path: Path, monkeypatch, capsys):
     )
     assert main(["-f", "compose.yml"]) == 1
     assert capsys.readouterr().out == "CE_TEST_PASS\n"
+
+
+def test_missing_env_file_is_an_error(tmp_path: Path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "compose.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    image: nginx\n"
+        "    env_file: missing.env\n",
+        encoding="utf-8",
+    )
+    assert main(["-f", "compose.yml"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "missing.env" in captured.err
+    assert "not found" in captured.err
+
+
+def test_missing_long_form_env_file_defaults_to_required(
+    tmp_path: Path, monkeypatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "compose.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    image: nginx\n"
+        "    env_file:\n"
+        "      - path: missing.env\n",
+        encoding="utf-8",
+    )
+    assert main(["-f", "compose.yml"]) == 2
+    assert "missing.env" in capsys.readouterr().err
+
+
+def test_optional_missing_env_file_is_skipped(tmp_path: Path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CE_TEST_FROM_OPTIONAL", raising=False)
+    (tmp_path / "compose.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    image: nginx\n"
+        "    env_file:\n"
+        "      - path: missing.env\n"
+        "        required: false\n"
+        "    environment:\n"
+        "      CE_TEST_FROM_OPTIONAL:\n",
+        encoding="utf-8",
+    )
+    assert main(["-f", "compose.yml"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "CE_TEST_FROM_OPTIONAL\n"
+    assert "missing.env" not in captured.err
+
+
+def test_unresolved_env_file_path_is_not_a_missing_file(
+    tmp_path: Path, monkeypatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CE_TEST_ENVDIR", raising=False)
+    (tmp_path / "compose.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    image: nginx\n"
+        "    env_file: ${CE_TEST_ENVDIR}/app.env\n",
+        encoding="utf-8",
+    )
+    assert main(["-f", "compose.yml"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "CE_TEST_ENVDIR\n"
+    assert "not found" not in captured.err

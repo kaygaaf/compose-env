@@ -88,7 +88,7 @@ def build_report(
     required: set[str] = set()
     defaulted: set[str] = set()
     conditional: list[tuple[str, tuple[Guard, ...]]] = []
-    service_env_files: list[Path] = []
+    service_env_files: list[tuple[str, Path, bool]] = []
 
     for display, path in compose_files:
         for doc in _load_yaml(display, path):
@@ -103,8 +103,8 @@ def build_report(
     provided = set(environ_keys)
     for display, path in _dotenv_files(env_file_args, cwd):
         provided.update(_read_env_keys(display, path, missing_ok=False))
-    for path in service_env_files:
-        provided.update(_read_env_keys(str(path), path, missing_ok=True))
+    for label, path, file_required in service_env_files:
+        provided.update(_read_env_keys(label, path, missing_ok=not file_required))
 
     for name, guards in conditional:
         if name in COMPOSE_BUILTINS or name in provided:
@@ -222,7 +222,7 @@ def _scan_node(
 
 
 def _scan_service_env(
-    doc, compose_dir: Path, required: set[str], env_paths: list[Path]
+    doc, compose_dir: Path, required: set[str], env_paths: list[tuple[str, Path, bool]]
 ) -> None:
     if not isinstance(doc, dict):
         return
@@ -259,35 +259,38 @@ def _passthrough_names(node, required: set[str]) -> None:
             required.add(name)
 
 
-def _env_file_paths(node, compose_dir: Path) -> list[Path]:
-    paths: list[Path] = []
-    for raw in _env_file_strings(node):
+def _env_file_paths(node, compose_dir: Path) -> list[tuple[str, Path, bool]]:
+    """Return ``(label, path, required)`` for env files whose path is known.
+
+    A path that still contains ``$`` is skipped. Compose would interpolate
+    it first, and the file name is not known yet. ``required`` defaults to
+    true, including the short string form. Only an explicit ``required: false``
+    makes a missing file optional.
+    """
+    paths: list[tuple[str, Path, bool]] = []
+    for raw, file_required in _env_file_specs(node):
         if "$" in raw:
             continue
         path = Path(raw)
         if not path.is_absolute():
             path = compose_dir / path
-        paths.append(path)
+        paths.append((raw, path, file_required))
     return paths
 
 
-def _env_file_strings(node) -> list[str]:
+def _env_file_specs(node) -> list[tuple[str, bool]]:
     if isinstance(node, str):
-        return [node]
-    if isinstance(node, list):
-        found: list[str] = []
-        for item in node:
-            if isinstance(item, str):
-                found.append(item)
-            elif isinstance(item, dict):
-                raw = item.get("path")
-                if isinstance(raw, str):
-                    found.append(raw)
-        return found
+        return [(node, True)]
     if isinstance(node, dict):
         raw = node.get("path")
         if isinstance(raw, str):
-            return [raw]
+            return [(raw, node.get("required") is not False)]
+        return []
+    if isinstance(node, list):
+        found: list[tuple[str, bool]] = []
+        for item in node:
+            found.extend(_env_file_specs(item))
+        return found
     return []
 
 
